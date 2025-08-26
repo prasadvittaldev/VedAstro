@@ -1,0 +1,38 @@
+name: Python API CI
+
+on:
+  push:
+    paths:
+      - 'pythonapi/**'
+      - '.github/workflows/python-ci.yml'
+  pull_request:
+    paths:
+      - 'pythonapi/**'
+      - '.github/workflows/python-ci.yml'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pythonapi
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Lint
+        run: |
+          ruff .
+          black --check .
+          mypy vedastro_core vedastro_api
+      - name: Test
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest
