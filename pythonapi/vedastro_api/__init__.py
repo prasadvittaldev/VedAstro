@@ -1,8 +1,10 @@
-"""FastAPI application exposing a small subset of VedAstro logic."""
+"""FastAPI application exposing a subset of VedAstro logic."""
 
+import os
 from datetime import datetime, timedelta, timezone
+from typing import Awaitable, Callable
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response
 
 from vedastro_core import (
     GeoLocation,
@@ -13,6 +15,8 @@ from vedastro_core import (
     moon_phase,
 )
 
+from .api_logger import log_request
+from .general import router as general_router
 from .models import (
     BirthPeriodRequest,
     BirthPeriodResponse,
@@ -21,8 +25,26 @@ from .models import (
     MoonPhaseRequest,
     MoonPhaseResponse,
 )
+from .throttle_manager import is_allowed
 
 app = FastAPI(title="VedAstro Python API")
+app.include_router(general_router)
+
+THROTTLE_LIMIT = int(os.getenv("VEDASTRO_THROTTLE_LIMIT", "1000"))
+THROTTLE_WINDOW = int(os.getenv("VEDASTRO_THROTTLE_WINDOW", "60"))
+
+
+@app.middleware("http")
+async def log_and_throttle(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Log all requests and throttle by IP."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not is_allowed(client_ip, THROTTLE_LIMIT, THROTTLE_WINDOW):
+        return Response(status_code=429)
+    response = await call_next(request)
+    log_request(request.url.path, response.status_code)
+    return response
 
 
 @app.get("/day-duration", response_model=DayDurationResponse)
